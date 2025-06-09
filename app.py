@@ -1,146 +1,149 @@
 import pandas as pd
 import numpy as np
-from sklearn.model_selection import train_test_split, GridSearchCV
-from sklearn.preprocessing import StandardScaler, OneHotEncoder, LabelEncoder
-from sklearn.impute import SimpleImputer
-from sklearn.compose import ColumnTransformer
-from sklearn.pipeline import Pipeline
-from imblearn.combine import SMOTEENN
-from lightgbm import LGBMClassifier
-from sklearn.metrics import classification_report, confusion_matrix, roc_auc_score, accuracy_score
 import matplotlib.pyplot as plt
 import seaborn as sns
 
-# Load datasets
-def load_data():
-    """Loads and merges the datasets."""
-    appointments = pd.read_csv("./datasets/appointments.csv")
-    patients = pd.read_csv("./datasets/patients.csv")
-    slots = pd.read_csv("./datasets/slots.csv")
-    # Merge datasets
-    df = appointments.merge(patients, on='patient_id', suffixes=('', '_patient'))
-    df = df.merge(slots, on='slot_id', suffixes=('', '_slot'))
-    return df
+from sklearn.metrics import accuracy_score, roc_auc_score, f1_score, recall_score, precision_score, confusion_matrix
+from sklearn.model_selection import train_test_split
+from sklearn.pipeline import Pipeline
+from sklearn.compose import ColumnTransformer
+from sklearn.preprocessing import StandardScaler
+from sklearn.linear_model import LogisticRegression
+from sklearn.tree import DecisionTreeClassifier
+from sklearn.ensemble import RandomForestClassifier
+from sklearn.neighbors import KNeighborsClassifier
+from sklearn.svm import SVC
 
-# Preprocess dataset
-def preprocess_data(df):
-    """Performs feature engineering and preprocessing."""
-    # Convert dates
-    for col in ['appointment_date', 'scheduling_date', 'dob']:
-        df[col] = pd.to_datetime(df[col], errors='coerce', dayfirst=True)
-    df.dropna(subset=['appointment_date', 'scheduling_date', 'dob'], inplace=True)
+from xgboost import XGBClassifier
+from lightgbm import LGBMClassifier
+from imblearn.combine import SMOTEENN
 
-    # Feature engineering
-    df['precise_age'] = (df['appointment_date'] - df['dob']).dt.days // 365
-    df['days_between'] = (df['appointment_date'] - df['scheduling_date']).dt.days
-    df['appointment_day_of_week'] = df['appointment_date'].dt.dayofweek
-    df['attended_flag'] = df['status'].apply(lambda x: 1 if str(x).strip().lower() == "attended" else 0)
+import warnings
+warnings.filterwarnings("ignore")
 
-    # Age group binning
-    bins = [0, 14, 19, 24, 29, 34, 39, 44, 49, 54, 59, 64, 69, 74, 79, 84, 89, 94, 99]
-    labels = ['0-14', '15-19', '20-24', '25-29', '30-34', '35-39', '40-44', '45-49',
-              '50-54', '55-59', '60-64', '65-69', '70-74', '75-79', '80-84', '85-89', '90-94', '95-99']
-    df['precise_age_group'] = pd.cut(df['precise_age'], bins=bins, labels=labels)
+# Load data
+appointments = pd.read_csv("appointments.csv")
+patients = pd.read_csv("patients.csv")
+slots = pd.read_csv("slots.csv")
 
-    # Drop rows with missing values in key columns
-    df.dropna(subset=['precise_age', 'days_between', 'scheduling_interval', 'sex', 'insurance'], inplace=True)
+# Merge datasets
+df = appointments.merge(patients, on='patient_id', suffixes=('', '_patient'))
+df = df.merge(slots, on='slot_id', suffixes=('', '_slot'))
 
-    return df
+# Convert date fields
+for col in ['appointment_date', 'scheduling_date', 'dob']:
+    df[col] = pd.to_datetime(df[col], errors='coerce', dayfirst=True)
 
-# Encode categorical features
-def encode_features(df, features):
-    """Encodes categorical features and balances the dataset."""
-    X = df[features]
-    y = df["attended_flag"]
+df.dropna(subset=['appointment_date', 'scheduling_date', 'dob'], inplace=True)
 
-    # Encode categorical features
-    categorical = ["precise_age_group", "sex", "insurance"]
-    label_encoders = {}
-    for col in categorical:
-        le = LabelEncoder()
-        X[col] = le.fit_transform(X[col].astype(str))
-        label_encoders[col] = le
+# Feature engineering
+df['precise_age'] = (df['appointment_date'] - df['dob']).dt.days // 365
+df['days_between'] = (df['appointment_date'] - df['scheduling_date']).dt.days
+df['appointment_day_of_week'] = df['appointment_date'].dt.dayofweek
+df['attended_flag'] = df['status'].apply(lambda x: 1 if str(x).strip().lower() == "attended" else 0)
 
-    return X, y
+# Age group binning
+bins = [0, 14, 19, 24, 29, 34, 39, 44, 49, 54, 59, 64, 69, 74, 79, 84, 89, 94, 99]
+labels = ['0-14', '15-19', '20-24', '25-29', '30-34', '35-39', '40-44', '45-49',
+          '50-54', '55-59', '60-64', '65-69', '70-74', '75-79', '80-84', '85-89', '90-94', '95-99']
+df['precise_age_group'] = pd.cut(df['precise_age'], bins=bins, labels=labels, include_lowest=True)
 
-# Create and evaluate the model
-def train_and_evaluate(X, y):
-    """Trains the model and evaluates it."""
-    # Balance data using SMOTEENN
-    smt = SMOTEENN(random_state=42)
-    X_bal, y_bal = smt.fit_resample(X, y)
+# Drop missing
+df.dropna(subset=['precise_age_group', 'precise_age', 'days_between', 'scheduling_interval', 'sex', 'insurance'], inplace=True)
 
-    # Train-test split
-    X_train, X_test, y_train, y_test = train_test_split(X_bal, y_bal, test_size=0.2, stratify=y_bal, random_state=42)
+# Select features
+features = ["scheduling_interval", "days_between", "appointment_day_of_week",
+            "precise_age", "precise_age_group", "sex", "insurance"]
+X = df[features].copy()
+y = df["attended_flag"]
 
-    # Preprocessing
-    numeric = ["scheduling_interval", "days_between", "appointment_day_of_week", "precise_age"]
-    categorical = ["precise_age_group", "sex", "insurance"]
-    preprocessor = ColumnTransformer([
-        ('num', StandardScaler(), numeric),
-        ('cat', OneHotEncoder(handle_unknown='ignore'), categorical)
-    ])
+# One-hot encode
+X_encoded = pd.get_dummies(X, columns=["precise_age_group", "sex", "insurance"])
 
-    # LightGBM classifier
-    model = LGBMClassifier(random_state=42, class_weight='balanced')
+# Balance dataset
+smt = SMOTEENN(random_state=42)
+X_bal, y_bal = smt.fit_resample(X_encoded, y)
 
-    # Pipeline
+# Train/test split
+X_train, X_test, y_train, y_test = train_test_split(X_bal, y_bal, test_size=0.2, stratify=y_bal, random_state=42)
+
+# Numeric columns to scale
+numeric = ["scheduling_interval", "days_between", "appointment_day_of_week", "precise_age"]
+numeric = [col for col in numeric if col in X_encoded.columns]
+
+# Preprocessing pipeline
+preprocessor = ColumnTransformer([
+    ('num', StandardScaler(), numeric)
+], remainder='passthrough')
+
+# Model dictionary
+models = {
+    "Logistic Regression": LogisticRegression(max_iter=1000),
+    "Decision Tree": DecisionTreeClassifier(),
+    "Random Forest": RandomForestClassifier(),
+    "LightGBM": LGBMClassifier(),
+    "XGBoost": XGBClassifier(use_label_encoder=False, eval_metric='logloss'),
+    "KNN": KNeighborsClassifier(),
+    "SVM": SVC(probability=True)
+}
+
+# Results storage
+results = {}
+
+# Train and evaluate models
+for name, model in models.items():
     pipeline = Pipeline([
         ('preprocessor', preprocessor),
         ('classifier', model)
     ])
+    pipeline.fit(X_train, y_train)
+    y_pred = pipeline.predict(X_test)
+    y_prob = pipeline.predict_proba(X_test)[:, 1]
 
-    # Hyperparameter grid for tuning
-    param_grid = {
-        'classifier__n_estimators': [100, 200, 300],
-        'classifier__max_depth': [10, 20, 30],
-        'classifier__learning_rate': [0.01, 0.05, 0.1]
+    cm = confusion_matrix(y_test, y_pred)
+    specificity = cm[0, 0] / (cm[0, 0] + cm[0, 1])
+
+    results[name] = {
+        "Accuracy": accuracy_score(y_test, y_pred),
+        "ROC-AUC": roc_auc_score(y_test, y_prob),
+        "F1-Score": f1_score(y_test, y_pred),
+        "Precision": precision_score(y_test, y_pred),
+        "Recall": recall_score(y_test, y_pred),
+        "Specificity": specificity,
+        "Confusion Matrix": cm
     }
 
-    # Grid search
-    grid = GridSearchCV(pipeline, param_grid, scoring='roc_auc', cv=5, verbose=1, n_jobs=-1)
-    grid.fit(X_train, y_train)
+# Convert to DataFrame
+results_df = pd.DataFrame(results).T
+print("\n📊 Model Performance Comparison:")
+print(results_df)
 
-    # Evaluate the model
-    best_model = grid.best_estimator_
-    y_pred = best_model.predict(X_test)
-    y_prob = best_model.predict_proba(X_test)[:, 1]
+# Clean numeric for plotting
+metrics_df = results_df.drop(columns=["Confusion Matrix"]).apply(pd.to_numeric, errors='coerce')
 
-    # Metrics
-    print("\nBest Hyperparameters:", grid.best_params_)
-    print("\nAccuracy:", accuracy_score(y_test, y_pred))
-    print("ROC-AUC Score:", roc_auc_score(y_test, y_prob))
-    print("Confusion Matrix:")
-    print(confusion_matrix(y_test, y_pred))
-    print("Classification Report:")
-    print(classification_report(y_test, y_pred))
+# Boxplot
+plt.figure(figsize=(12, 8))
+metrics_df.boxplot()
+plt.title('Box Plot of Model Metrics', fontsize=16)
+plt.ylabel('Scores')
+plt.xticks(rotation=45)
+plt.grid(True)
+plt.show()
 
-    # Plot ROC curve
-    plot_roc_curve(y_test, y_prob)
+# Accuracy Barplot
+plt.figure(figsize=(10, 6))
+sns.barplot(x=metrics_df.index, y=metrics_df['Accuracy'], palette='viridis')
+plt.title('Model Accuracy Comparison')
+plt.ylabel('Accuracy')
+plt.xticks(rotation=45)
+plt.grid(True)
+plt.show()
 
-# Plot ROC-AUC Curve
-def plot_roc_curve(y_test, y_prob):
-    """Plots the ROC-AUC curve."""
-    from sklearn.metrics import roc_curve, auc
-    fpr, tpr, _ = roc_curve(y_test, y_prob)
-    roc_auc = auc(fpr, tpr)
-
-    plt.figure(figsize=(8, 6))
-    plt.plot(fpr, tpr, color='darkorange', lw=2, label=f'ROC curve (area = {roc_auc:.2f})')
-    plt.plot([0, 1], [0, 1], color='navy', lw=2, linestyle='--')
-    plt.xlabel('False Positive Rate')
-    plt.ylabel('True Positive Rate')
-    plt.title('Receiver Operating Characteristic (ROC)')
-    plt.legend(loc="lower right")
-    plt.show()
-
-# Main execution
-if __name__ == "__main__":
-    df = load_data()
-    df = preprocess_data(df)
-
-    features = ["scheduling_interval", "days_between", "appointment_day_of_week",
-                "precise_age", "precise_age_group", "sex", "insurance"]
-    X, y = encode_features(df, features)
-
-    train_and_evaluate(X, y)
+# ROC-AUC Barplot
+plt.figure(figsize=(10, 6))
+sns.barplot(x=metrics_df.index, y=metrics_df['ROC-AUC'], palette='coolwarm')
+plt.title('Model ROC-AUC Comparison')
+plt.ylabel('ROC-AUC Score')
+plt.xticks(rotation=45)
+plt.grid(True)
+plt.show()
