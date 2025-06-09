@@ -1,31 +1,78 @@
-# Predicting and Optimising NHS Appointment Attendance Using Machine Learning
+# Predicting and Optimising NHS Appointment Attendance using Machine Learning
 
-## Project Overview and Objective
+## Project Objective
 
-Missed medical appointments are a significant challenge for healthcare systems like the NHS, leading to wasted resources and longer waiting times. This project aims to **predict patient appointment attendance** using machine learning, and suggest how understanding these patterns can help **optimise scheduling** and reduce no-shows. By analyzing historical appointment data (combining patient demographics, scheduling details, and appointment history), the model learns patterns that distinguish between attended appointments and those where patients did not attend. 
+Missed medical appointments cost healthcare systems significant resources. This project uses machine learning to **predict NHS patient attendance** based on appointment history, patient demographics, and scheduling factors. With better predictions, hospitals can reduce no-shows through smart scheduling and targeted interventions.
 
-The ultimate objective is to provide a predictive tool that healthcare providers can use to identify high no-show risk appointments in advance. This could enable targeted interventions (like reminder calls or double-booking strategies) to improve attendance rates and overall efficiency.
+## Dataset Overview
 
-## Dataset
+This project integrates three real-world datasets:
 
-The dataset consists of three CSV files included in the `datasets/` directory:
+* `appointments.csv`: Appointment details (appointment_id, slot_id, scheduling_date, appointment_date, appointment_time, scheduling_interval, status, check_in_time, appointment_duration, start_time, end_time, waiting_time, patient_id, sex, age, age_group).
+* `patients.csv`: Patient demographics (patient_id, name, sex, dob, insurance).
+* `slots.csv`: Time slot metadata (slot_id, appointment_date, appointment_time, is_available).
 
-- **appointments.csv:** Each record represents an appointment with details such as scheduling date, appointment date/time, the interval between scheduling and appointment, and the outcome status (`attended`, `did not attend`, `cancelled`, etc.). This is the primary dataset used for modeling attendance.
-- **patients.csv:** Demographic information for patients (e.g., patient ID, sex, date of birth, insurance provider). These details can be linked to appointments and used as features (for example, age or sex may correlate with attendance patterns).
-- **slots.csv:** Information about appointment slots (times and dates, and whether the slot was available or booked). This can be used to understand scheduling context (though in this project, the focus is primarily on whether a slot was attended or missed).
+Data preprocessing includes:
 
-**Data preprocessing:** Before training the model, the script merges and cleans these datasets. For example, it calculates each patient's age from the date of birth, categorizes appointment status into "attended" vs "missed" (no-show), and removes or flags appointments that were cancelled or still scheduled (since those are not no-shows). It also derives useful features such as the lead time between scheduling and the appointment (`scheduling_interval`), and possibly the patient's past attendance history (how many previous appointments they missed). Categorical fields (like sex or insurance type) are encoded so that they can be used by the machine learning model.
+* Age and weekday feature extraction
+* Appointment lead time calculation
+* One-hot encoding
+* SMOTEENN for balancing class distribution
 
-## Setup and Installation
+## Machine Learning Models
 
-**Requirements:** This project uses Python 3 and common data science libraries. To set up the environment, install the following dependencies (for example, via pip):
+This research trained and evaluated **7 different models** using a common pipeline:
 
-- `pandas` – for data loading and manipulation
-- `numpy` – for numerical operations
-- `scikit-learn` – for machine learning algorithms and evaluation metrics
-- `matplotlib` (and optionally `seaborn`) – for plotting the ROC curve and other visualizations
+* Logistic Regression
+* Decision Tree
+* Random Forest
+* K-Nearest Neighbors (KNN)
+* Support Vector Machine (SVM)
+* LightGBM
+* XGBoost
 
-You can install the requirements with: 
+All models were evaluated on:
+
+* Accuracy
+* ROC-AUC
+* F1 Score
+* Precision
+* Recall
+* Specificity
+* Confusion Matrix
+
+ **Best Performing Model:**
+`Random Forest` yielded highest accuracy (92.4%) and AUC (97.9%).
+
+## Results
+
+| Model               | Accuracy  | ROC-AUC   | F1 Score  | Recall | Specificity |
+| ------------------- | --------- | --------- | --------- | ------ | ----------- |
+| Logistic Regression | 0.747     | 0.835     | 0.573     | 0.565  | 0.826       |
+| Decision Tree       | 0.831     | 0.910     | 0.710     | 0.687  | 0.893       |
+| Random Forest       | **0.924** | **0.979** | **0.872** | 0.856  | 0.954       |
+| LightGBM            | 0.829     | 0.909     | 0.695     | 0.650  | 0.905       |
+| XGBoost             | 0.831     | 0.910     | 0.710     | 0.687  | 0.893       |
+| KNN                 | 0.831     | 0.910     | 0.710     | 0.687  | 0.893       |
+| SVM                 | 0.779591  | 0.857354     | 0.627792     | 0.63722  | 0.893       |
+
+## Visuals
+
+Plots include:
+
+* Model metric comparison (bar and box plots)
+* ROC curve (for top-performing models)
+
+> *Note: Visuals are generated automatically by the script.*
+
+## Requirements
 
 ```bash
-pip install pandas numpy scikit-learn matplotlib
+pip install pandas numpy scikit-learn xgboost lightgbm imbalanced-learn matplotlib seaborn
+```
+
+## Getting Started
+
+```bash
+python your_script_name.py
+```
