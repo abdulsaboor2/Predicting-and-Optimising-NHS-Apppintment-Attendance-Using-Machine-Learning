@@ -73,7 +73,7 @@ Plots include:
 
 ![h](https://github.com/user-attachments/assets/8ec9449f-b483-40c3-9ef2-36e46ad0d815)
 
-### Box Plot of Model Metrix
+### Box Plot of Model Metrics
 
 ![download (8)](https://github.com/user-attachments/assets/ec703d9a-0b3a-41d2-9fdb-1d49d2c05ceb)
 
